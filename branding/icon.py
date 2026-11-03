@@ -13,11 +13,12 @@ PNGs) and 32x32, 64x64, 128x128, 128x128@2x and icon.png (512) with the per-size
 renders; the site's favicons, icon-256/512 and mark.png (128) too, then og.png
 from og.html.
 
-    python3 branding/icon.py --themes OUT_DIR   # zalo-256.svg ... teams-512.svg
+    python3 branding/icon.py --themes OUT_DIR   # zalo-256.svg ... gchat-512.svg
 
-The icons the app shows while it runs with the Zalo, WhatsApp or Teams theme (see
-icon.rs): that app's own logo (brands/: Zalo's and WhatsApp's public domain on
-Wikimedia Commons, Teams' as Teams draws it) with fMess's icon as a badge in the
+The icons the app shows while it runs with the Zalo, WhatsApp, Teams or Google
+Chat theme (see icon.rs): that app's own logo (brands/: Zalo's and WhatsApp's
+public domain on Wikimedia Commons, Teams' as Teams draws it, Google Chat's 2026
+favicon from ssl.gstatic.com, a Google trademark) with fMess's icon as a badge in the
 corner, at 512 for the Dock and 256 for the window and tray. Render them as above
 into src-tauri/icons/themes/."""
 import math, pathlib, re, sys
@@ -73,6 +74,11 @@ def brand(name):
     if name == "zalo":
         # Zalo's logo is its whole app icon, a rounded square (50 units).
         return f'<g filter="url(#logoshadow)"><g transform="translate(100,100) scale({824 / 50})">{inner(logo)}</g></g>'
+    if name == "gchat":
+        # Google Chat's 2026 bubble (a 256px picture, as Chat's favicon has it:
+        # no vector is published), on a white square as its installed app shows it.
+        return f'''<g filter="url(#logoshadow)"><path d="{SQUIRCLE}" fill="#ffffff"/></g>
+<g transform="translate(192,200) scale(2.5)">{inner(logo)}</g>'''
     if name == "teams":
         # Teams' logo alone (20 units from 2,2), on a white square as its app shows it.
         return f'''<g filter="url(#logoshadow)"><path d="{SQUIRCLE}" fill="#ffffff"/></g>
@@ -100,7 +106,7 @@ def themed(size, name):
 if __name__ == "__main__":
     if sys.argv[1] == "--themes":
         out = pathlib.Path(sys.argv[2])
-        for name in ("zalo", "whatsapp", "teams"):
+        for name in ("zalo", "whatsapp", "teams", "gchat"):
             for size in (256, 512):
                 (out / f"{name}-{size}.svg").write_text(themed(size, name))
         sys.exit()

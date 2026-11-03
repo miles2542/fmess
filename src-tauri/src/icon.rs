@@ -1,5 +1,5 @@
 //! A picture chosen in Settings is fMess's icon. Otherwise, with the Zalo,
-//! WhatsApp or Teams theme, it becomes that app's logo with fMess's own as a
+//! WhatsApp, Teams or Google Chat theme, it becomes that app's logo with fMess's own as a
 //! badge (branding/icon.py --themes), unless turned off in Settings; otherwise
 //! it is fMess's.
 //! Only while fMess runs, in the Dock (macOS), on its windows and taskbar
@@ -37,6 +37,10 @@ fn icon(theme: Option<&str>) -> (&'static [u8], Option<&'static [u8]>) {
         Some("teams") => (
             include_bytes!("../icons/themes/teams-256.png"),
             Some(include_bytes!("../icons/themes/teams-512.png")),
+        ),
+        Some("gchat") => (
+            include_bytes!("../icons/themes/gchat-256.png"),
+            Some(include_bytes!("../icons/themes/gchat-512.png")),
         ),
         _ => (include_bytes!("../icons/128x128@2x.png"), None),
     }
