@@ -12,26 +12,47 @@ const CHATS = 'data-fmess-chats';
 const keepChats = setInterval(() => document.documentElement.setAttribute(CHATS, ''), 100);
 document.documentElement.setAttribute(CHATS, '');
 
+// Beside the chat list, which keeps Messenger's own search field in view.
 const host = document.createElement('div');
 host.id = 'fmess-field-check';
 host.style.cssText =
-  'position: fixed; left: 0; top: 0; width: 860px; height: 420px; z-index: 2147480000; background: #fff; color: #000;' +
-  'display: flex; gap: 16px; padding: 60px 20px 20px; box-sizing: border-box; font: 14px sans-serif;';
+  'position: fixed; left: 340px; top: 120px; width: 520px; height: 300px; z-index: 2147480000; background: #fff; color: #000;' +
+  'display: flex; flex-wrap: wrap; gap: 16px; padding: 20px; box-sizing: border-box; font: 14px sans-serif; border: 2px solid #f0f;';
 host.innerHTML = `
-  <div role="navigation" style="width: 240px">
-    <input id="fc-search" type="search" role="combobox" placeholder="search" autocomplete="off" spellcheck="false" style="width: 220px; height: 32px">
-  </div>
-  <div role="main" style="flex: 1; display: flex; flex-direction: column; gap: 16px">
+  <div role="navigation" style="width: 220px; display: flex; flex-direction: column; gap: 16px">
+    <input id="fc-search" type="search" role="combobox" placeholder="search" autocomplete="off" spellcheck="false" style="height: 32px">
     <input id="fc-text" type="text" placeholder="text" style="height: 32px">
-    <div role="region"><div id="fc-composer" contenteditable="true" role="textbox" style="height: 40px; border: 1px solid #888"><p><br></p></div></div>
   </div>
-  <div role="dialog" style="width: 240px; display: flex; flex-direction: column; gap: 16px">
-    <input id="fc-dialog" type="text" placeholder="dialog" style="height: 32px">
-    <textarea id="fc-area" placeholder="area" style="height: 40px"></textarea>
-    <input id="fc-pin" type="tel" maxlength="6" inputmode="numeric" placeholder="pin" style="height: 32px">
+  <div role="main" style="width: 240px; display: flex; flex-direction: column; gap: 16px">
+    <div role="region"><div id="fc-composer" contenteditable="true" role="textbox" style="height: 32px; border: 1px solid #888"><p><br></p></div></div>
+    <div id="fc-plain" contenteditable="plaintext-only" role="textbox" style="height: 32px; border: 1px solid #888"></div>
+  </div>
+  <div role="dialog" style="width: 476px; display: flex; gap: 16px">
+    <input id="fc-dialog" type="text" placeholder="dialog" style="width: 140px; height: 32px">
+    <textarea id="fc-area" placeholder="area" style="width: 140px; height: 32px"></textarea>
+    <input id="fc-pin" type="tel" maxlength="6" inputmode="numeric" placeholder="pin" style="width: 140px; height: 32px">
   </div>`;
 document.body.append(host);
-const fields = [...host.querySelectorAll('input, textarea, [contenteditable="true"]')];
+const fields = [...host.querySelectorAll('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]')];
+// Messenger's own fields that take typing without anyone seeing it: the
+// chat list's search (when signed in; cleared afterwards). Never the message
+// box, which tells the other side you're typing.
+const messengerSearch = [...document.querySelectorAll('[role="navigation"] input[type="search"]')].find((field) => {
+  const box = field.getBoundingClientRect();
+  return box.width > 0 && box.right < 340;
+});
+if (messengerSearch) {
+  messengerSearch.id ||= 'messenger-search';
+  fields.unshift(messengerSearch);
+}
+// Signed out (the Windows check runs on a fresh profile): Facebook's own
+// login field, typed in but never sent.
+const loginField = [...document.querySelectorAll('input[name="email"]')].find((field) => {
+  const box = field.getBoundingClientRect();
+  return box.width > 0 && box.bottom > 0 && box.top < innerHeight && (box.right < 340 || box.left > 860 || box.top > 420);
+});
+if (loginField) fields.unshift(loginField);
+const idOf = (field) => field.id || field.name;
 
 // What the page does with the clicks and keys, after every listener ran.
 const seen = [];
@@ -49,7 +70,7 @@ await pause(500);
 say(`window ${innerWidth} ${innerHeight} ${devicePixelRatio} ${navigator.platform} inject=${Boolean(window.__fmessInstalled)}`);
 for (const field of fields) {
   const box = field.getBoundingClientRect();
-  say(`target ${field.id} ${Math.round(box.left + box.width / 2)} ${Math.round(box.top + box.height / 2)}`);
+  say(`target ${idOf(field)} ${Math.round(box.left + box.width / 2)} ${Math.round(box.top + box.height / 2)}`);
 }
 say('ready');
 
@@ -62,9 +83,25 @@ while (Date.now() < until) {
 clearInterval(keepChats);
 const result = {
   inject: Boolean(window.__fmessInstalled),
-  values: Object.fromEntries(fields.map((field) => [field.id, valueOf(field)])),
-  styles: Object.fromEntries(fields.map((field) => [field.id, getComputedStyle(field).userSelect])),
+  values: Object.fromEntries(fields.map((field) => [idOf(field), valueOf(field)])),
+  styles: Object.fromEntries(fields.map((field) => [idOf(field), getComputedStyle(field).userSelect])),
   seen,
 };
 host.remove();
+for (const field of [loginField].filter(Boolean)) {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(field, '');
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  field.blur();
+}
+// On Windows, the Settings window's App name next: field-check.ps1 finds it
+// there through UI Automation. (Typing there renames the app, so not on a Mac
+// someone uses.)
+if (/^Win/.test(navigator.platform)) window.__TAURI_INTERNALS__?.invoke('open_settings').catch(() => {});
+if (messengerSearch) {
+  // Through the value setter React watches, so Messenger sees it emptied.
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(messengerSearch, '');
+  messengerSearch.dispatchEvent(new Event('input', { bubbles: true }));
+  messengerSearch.blur();
+  if (messengerSearch.id === 'messenger-search') messengerSearch.removeAttribute('id');
+}
 return result;

@@ -46,6 +46,7 @@ public static class Input {
 }
 "@
 [Input]::SetProcessDPIAware() | Out-Null
+Add-Type -AssemblyName System.Windows.Forms
 
 Get-Process fmess -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep 1
@@ -94,11 +95,48 @@ foreach ($name in $targets.Keys) {
 
 for ($i = 0; $i -lt 200; $i++) {
   Start-Sleep 1
-  $result = Get-Content $log | Where-Object { $_ -like "[probe]*" } | Select-Object -First 1
+  # (-like would read [probe] as a set of letters.)
+  $result = Get-Content $log | Where-Object { $_.StartsWith("[probe]") } | Select-Object -First 1
   if ($result) { break }
 }
+if (-not $result) { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue; Write-Host "No result from the probe; see $log"; Get-Content $log -Tail 40; exit 1 }
+
+# Then the App name in the Settings window, which the probe opened: found
+# through UI Automation, clicked where it is on screen (or given the focus if
+# it is below the screen's edge), typed into, and read back.
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+$auto = [System.Windows.Automation.AutomationElement]
+$settingsValue = $null
+for ($i = 0; $i -lt 30 -and $null -eq $settingsValue; $i++) {
+  Start-Sleep 1
+  $edit = $null
+  foreach ($window in $auto::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, (New-Object System.Windows.Automation.PropertyCondition($auto::ProcessIdProperty, $app.Id)))) {
+    if ($window.Current.NativeWindowHandle -eq [int]$hwnd) { continue }
+    $edit = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition($auto::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)))
+    if ($edit) { break }
+  }
+  if (-not $edit) { continue }
+  $box = $edit.Current.BoundingRectangle
+  $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+  if ($box.Bottom -lt $screen.Bottom -and $box.Width -gt 0) {
+    [Input]::SetCursorPos([int]($box.X + $box.Width / 2), [int]($box.Y + $box.Height / 2)) | Out-Null
+    Start-Sleep -Milliseconds 300
+    [Input]::Click()
+    $how = "clicked"
+  } else {
+    $edit.SetFocus()
+    $how = "focused (off screen at $($box.Y))"
+  }
+  Start-Sleep -Milliseconds 700
+  [Input]::Key(0x46)
+  [Input]::Key(0x4D)
+  Start-Sleep -Milliseconds 200
+  [Input]::Unicode([char]0x00EA)
+  Start-Sleep -Milliseconds 700
+  $settingsValue = $edit.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value
+  Write-Host "typed into the Settings window's App name ($how)"
+}
 Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
-if (-not $result) { Write-Host "No result from the probe; see $log"; Get-Content $log -Tail 40; exit 1 }
 $json = $result.Substring(8) | ConvertFrom-Json
 if ($json -is [string]) { $json = $json | ConvertFrom-Json }
 $failed = 0
@@ -107,5 +145,8 @@ foreach ($field in $json.values.PSObject.Properties) {
   if (-not $ok) { $failed++ }
   Write-Host ("{0} {1}: '{2}' (user-select {3})" -f $(if ($ok) { "PASS" } else { "FAIL" }), $field.Name, $field.Value, $json.styles.($field.Name))
 }
+if ($null -eq $settingsValue) { $failed++; Write-Host "FAIL settings app name: not found" }
+elseif ($settingsValue -eq "fmê") { Write-Host "PASS settings app name: '$settingsValue'" }
+else { $failed++; Write-Host "FAIL settings app name: '$settingsValue'" }
 $json.seen | Select-Object -First 120 | ForEach-Object { Write-Host "  $_" }
 if ($failed) { Write-Host "FAILED ($failed)"; exit 1 } else { Write-Host "PASSED" }
