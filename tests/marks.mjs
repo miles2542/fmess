@@ -195,5 +195,32 @@ check('after editing: the edit box left in the chat loses its marks', ui(edit.pa
   check('the real message box is still the composer', ui(box.region) === 'composer');
 }
 
+// Recording a voice clip: a bar (stop, the clip's progress and its timer)
+// comes before the field, which stays, hidden; send is on, and cancel comes
+// after send's span.
+{
+  const rec = chat();
+  const stop = div({ role: 'button' }, new El('svg', {}, [new El('rect')]));
+  const bar = div({}, stop, div({ role: 'slider' }), div({ role: 'timer' }));
+  const send = button('M16.6915026,12.4744748');
+  const cancel = button('M8 .5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15z');
+  const region = div(
+    { role: 'region', 'aria-label': 'Thread composer' },
+    div({}, new El('span', {}, [button('M7 4.25a1.25 1.25 0 1 1-2.5 0')])),
+    bar,
+    div({}, div({}, textbox())),
+    new El('span', {}, [send]),
+    div({}, new El('span', {}, [cancel])),
+  );
+  rec.bottom.append(div({}, region));
+  markUi(rec.main, null, rec.log, null);
+  check('recording: the bar is record-bar', ui(bar) === 'record-bar' && marked(rec.main, 'record-bar').length === 1, ui(bar));
+  check('recording: stop, send and cancel', ui(stop) === 'record-stop' && ui(send) === 'send' && ui(cancel) === 'record-cancel', [ui(stop), ui(send), ui(cancel)]);
+  // Done: the timer goes, and Facebook may keep the bar's box.
+  bar.children.at(-1).remove();
+  markUi(rec.main, null, rec.log, null);
+  check('after recording: the box left behind is not record-bar', ui(bar) === null, ui(bar));
+}
+
 console.log(results.join('\n'));
 if (results.some((line) => line.startsWith('FAIL'))) process.exit(1);

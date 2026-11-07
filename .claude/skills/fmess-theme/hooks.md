@@ -71,6 +71,7 @@ input, so a fresh DOM may go up to a second without its marks. A mark that no lo
 | `voice-clip`, `attach`, `sticker`, `gif`, `emoji` | composer buttons | start of their `svg path d` (`COMPOSER_ICONS`). Breaks if Facebook redraws an icon. |
 | `like` / `send` | the button in the composer's last `<span>`: `like` while it holds an `<img>` (the chat's quick reaction) or Messenger's own thumbs-up `<svg>` (its path starts `M16,9.1c`, `THUMBS_UP` in 09-marks.js), `send` otherwise | structure, re-marked on input. **History (0.1.21):** the default thumbs-up used to be marked `send` on an empty box, and a theme that showed `send` as a send button sent a 👍. It is `like` now; still check the composer in a chat whose quick reaction is the default 👍. |
 | `more-actions` | any other composer button outside the text field. While typing, Messenger folds attach/sticker/gif into one "+", which gets this mark. | structure |
+| `record-bar` | while recording a voice clip, the composer child holding the clip's `[role=timer]` (with `record-stop`, then `record-play`, and the clip's progress), in the field's place; not the last `<span>` (send). `record-cancel` comes after send's span. | structure; taken off once the timer goes |
 | `edit-composer` | while a message is edited, Facebook's edit box in the composer's place: two rows, `edit-bar` then `edit-box` | from the text box outwards: each step the next box with another `[role=button]` in it (field, row, this), below the box holding `[role=log]` |
 | `edit-bar` | its first row: the title ("Edit message", an `h3`) and `edit-cancel` (X) | structure |
 | `edit-box` | its second row; its child is the row of `edit-field` and `edit-done` | structure |
@@ -185,6 +186,9 @@ instead: `--fmess-search-box: 1` on `:root` makes fMess add `#fmess-search-box` 
 `<body>`, a `role=button` div that carries the field's (translated) placeholder and
 focuses Messenger's field on click. Style the box where the target has its search; fold
 Messenger's field until it has the focus (Teams puts its row over the title row then).
+While the field has the focus, `<html>` carries `data-fmess-searching`, and
+`data-fmess-search-results` too while Messenger's results (`ul[role=listbox]`) are up, so
+the field and its results can be drawn as one card where the box was (Google Chat).
 
 ## Quick reactions in a message's hover actions: `--fmess-quick-reactions`
 

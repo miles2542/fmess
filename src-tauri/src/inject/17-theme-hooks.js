@@ -148,6 +148,28 @@
     const placeholder = document.querySelector('[role="navigation"] input[type="search"]')?.placeholder ?? '';
     if (box.textContent !== placeholder) box.textContent = placeholder;
   }, 500);
+  // While Messenger's search field has the focus, <html> carries
+  // data-fmess-searching, so a theme can show the field (and its results)
+  // where its own box was; data-fmess-search-results too while Messenger
+  // shows its results (a listbox under the field), so the field and the
+  // results can be drawn as one card.
+  const SEARCHING = 'data-fmess-searching';
+  const SEARCH_RESULTS = 'data-fmess-search-results';
+  const isSearchField = (el) => el instanceof Element && el.matches('[role="navigation"] input[type="search"]');
+  const resultsWatcher = new MutationObserver(() => {
+    document.documentElement.toggleAttribute(SEARCH_RESULTS, Boolean(document.querySelector('ul[role="listbox"]')));
+  });
+  document.addEventListener('focusin', (event) => {
+    if (!isSearchField(event.target)) return;
+    document.documentElement.setAttribute(SEARCHING, '');
+    resultsWatcher.observe(document.body, { childList: true, subtree: true });
+  });
+  document.addEventListener('focusout', (event) => {
+    if (!isSearchField(event.target) || isSearchField(event.relatedTarget)) return;
+    resultsWatcher.disconnect();
+    document.documentElement.removeAttribute(SEARCHING);
+    document.documentElement.removeAttribute(SEARCH_RESULTS);
+  });
 
   // A theme can put quick reactions in a message's hover actions (the Teams
   // look's emoji row): --fmess-quick-reactions on :root, emoji as codepoints

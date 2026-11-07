@@ -3,8 +3,10 @@
   // a theme that only matched them worked in English. fMess marks the parts
   // themes style with data-fmess-ui, found by where they are and by their
   // icons: composer (the message box) and in it voice-clip, attach, sticker,
-  // gif, more-actions (any other button there), emoji, like and send; while
-  // a message is edited, edit-composer in its place and in it edit-bar
+  // gif, more-actions (any other button there), emoji, like and send, and
+  // while recording a voice clip record-bar (the clip's timer, its progress
+  // and record-stop, then record-play) and record-cancel; while a message is
+  // edited, edit-composer in its place and in it edit-bar
   // ("Edit message" and edit-cancel), edit-box with edit-field (the box and
   // edit-emoji) and edit-done (✓, which saves);
   // chat-header and in it audio-call, video-call and info (which shows the
@@ -43,6 +45,13 @@
     // Recording a voice clip, or replaying it: the cancel button is there, and
     // so is a play button that becomes pause (its icon is not listed).
     const recording = buttons.some((button) => pathOf(button).startsWith('M8 .5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15z'));
+    // While recording, a bar with the clip's timer takes the field's place
+    // (not the last span, which holds send).
+    const tail = [...composer.children].findLast((child) => child.tagName === 'SPAN');
+    for (const child of composer.children) {
+      if (child !== tail && child.querySelector('[role="timer"]')) mark(child, 'record-bar');
+      else if (child.getAttribute(UI) === 'record-bar') child.removeAttribute(UI);
+    }
     for (const button of buttons) {
       const path = pathOf(button);
       const icon = COMPOSER_ICONS.find(([start]) => path.startsWith(start))?.[1];
@@ -62,6 +71,7 @@
     'composer-bar',
     ...COMPOSER_ICONS.map(([, name]) => name),
     'record-stop',
+    'record-bar',
     'like',
     'send',
     'more-actions',
