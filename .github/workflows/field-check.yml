@@ -1,0 +1,38 @@
+name: Field check (Windows)
+
+# Clicks into fields in the Windows app and types there, with the real mouse
+# and keyboard (tests/app/field-check.ps1), with and without fMess's page
+# script (#51: fields other than the message box took no typing on Windows).
+on:
+  workflow_dispatch:
+  push:
+    branches: ['fix-51-*']
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+      - run: npm ci
+      - run: npx tauri build --debug --no-bundle
+      - name: Without fMess's page script
+        shell: pwsh
+        continue-on-error: true
+        run: ./tests/app/field-check.ps1 -NoInject
+      - name: With fMess's page script
+        shell: pwsh
+        run: ./tests/app/field-check.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: field-check
+          path: field-check-out/
+          retention-days: 7
