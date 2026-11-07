@@ -96,6 +96,9 @@ the encrypted chats' worker keeps one to web-chat-e2ee.facebook.com.
 - Messages waiting at "Sending" go out after a reload: needs a chat you may send
   test messages to.
 
+Typing into fields (anything but the message box) is the fmess-field-check
+skill; how chats look, fmess-chat-check. A full test run is all three.
+
 ## Adding a case
 
 Make it up at the proxy or with Messenger's own calls, never with a real chat

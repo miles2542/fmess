@@ -61,4 +61,6 @@ to try it in the debug build (a recorder probe helps, see fmess-fast-iteration
 in memory).
 
 For what happens when the computer sleeps, the network drops, the encrypted
-chats' worker dies or a notification rings, see the fmess-live-check skill.
+chats' worker dies or a notification rings, see the fmess-live-check skill;
+for clicking into fields and typing there (search, dialogs, Settings), the
+fmess-field-check skill. A full test run is all three.

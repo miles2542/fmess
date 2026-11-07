@@ -5,10 +5,10 @@
 # lists Messenger's own fields it can type in harmlessly; then clicks each
 # with the real mouse and types with the real keyboard
 # (tests/app/field-click.swift: "fm" as keys, "ê" as an input method hands it
-# over). Every field must end up with "fmê". It quits the running fMess and
-# opens the installed one again at the end. Moves the pointer and types for
-# about 20 s: hands off the keyboard while it runs. Needs Accessibility access
-# for the terminal.
+# over). Every field must end up with "fmê". It quits the running fMess
+# (installed or a debug build) and opens it again at the end. Moves the
+# pointer and types for about 20 s: hands off the keyboard while it runs.
+# Needs Accessibility access for the terminal.
 #
 #   tests/app/field-check.sh [output dir]
 set -euo pipefail
@@ -17,7 +17,10 @@ OUT="${1:-$(mktemp -d "${TMPDIR:-/tmp}/fmess-field-check.XXXXXX")}"
 APP=src-tauri/target/debug/bundle/macos/fMess.app
 mkdir -p "$OUT"
 [ -d "$APP" ] || { echo "No debug build at $APP: npx tauri build --debug --bundles app"; exit 1; }
+swiftc -O tests/app/field-click.swift -o "$OUT/field-click" 2>"$OUT/swiftc.log" || { cat "$OUT/swiftc.log"; exit 1; }
 
+# The fMess running now (installed or a debug build) opens again at the end.
+RUNNING=$(pgrep -fl "fMess.app/Contents/MacOS/fmess" | head -1 | sed -E 's#^[0-9]+ (.*fMess\.app)/Contents/MacOS/fmess.*#\1#')
 pkill -f "fMess.app/Contents/MacOS/fmess" || true
 sleep 2
 open --env FMESS_PROBE="$PWD/tests/app/field-check.js" --env FMESS_PROBE_DELAY=15 --env FMESS_PROBE_WAIT=200 --stderr "$OUT/app.log" "$APP"
@@ -30,7 +33,11 @@ grep -q 'fieldcheck ready' "$OUT/app.log" || { echo "No fields from the probe; s
 PID=$(pgrep -f "$APP/Contents/MacOS/fmess" | head -1)
 WIDTH=$(grep -o 'fieldcheck window [0-9]*' "$OUT/app.log" | head -1 | awk '{print $3}')
 grep -o 'fieldcheck target .*' "$OUT/app.log" | while read -r _ _ name x y; do
-  echo "$name: $(swift tests/app/field-click.swift "$PID" "$x" "$y" "$WIDTH")"
+  # Brings the running debug app forward (LaunchServices may; field-click
+  # checks it did, and clicks nothing that isn't fMess).
+  open "$APP"
+  sleep 0.5
+  echo "$name: $("$OUT/field-click" "$PID" "$x" "$y" "$WIDTH" || true)"
 done
 for _ in $(seq 1 100); do
   grep -q '^\[probe\]' "$OUT/app.log" && break
@@ -39,7 +46,7 @@ done
 
 pkill -f "$APP/Contents/MacOS/fmess" || true
 sleep 2
-open -a /Applications/fMess.app 2>/dev/null || true
+open "${RUNNING:-/Applications/fMess.app}" 2>/dev/null || true
 
 python3 - "$OUT" <<'EOF'
 import json, sys

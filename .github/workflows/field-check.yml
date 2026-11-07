@@ -2,14 +2,17 @@ name: Field check (Windows)
 
 # Clicks into fields in the Windows app and types there, with the real mouse
 # and keyboard (tests/app/field-check.ps1), with and without fMess's page
-# script (#51: fields other than the message box took no typing on Windows).
+# script. Runs with the Windows test build: a pull request labelled
+# "test build" (again on each push while it has it), or by hand. #51 (a user's
+# fields other than the message box took no typing) is why it exists.
 on:
   workflow_dispatch:
-  push:
-    branches: ['fix-51-*']
+  pull_request:
+    types: [labeled, synchronize]
 
 jobs:
   check:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'test build')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
