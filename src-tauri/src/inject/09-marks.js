@@ -3,7 +3,9 @@
   // a theme that only matched them worked in English. fMess marks the parts
   // themes style with data-fmess-ui, found by where they are and by their
   // icons: composer (the message box) and in it voice-clip, attach, sticker,
-  // gif, more-actions (any other button there), emoji, like and send; while
+  // gif, more-actions (any other button there), emoji, like and send;
+  // composer-bar above it and in it, while replying, reply-text (the block
+  // of reply-title and reply-quote); while
   // a message is edited, edit-composer in its place and in it edit-bar
   // ("Edit message" and edit-cancel), edit-box with edit-field (the box and
   // edit-emoji) and edit-done (✓, which saves);
@@ -36,7 +38,19 @@
   const markComposer = (composer) => {
     mark(composer, 'composer');
     // The bar above the box while replying, or with a link's preview.
-    mark(composer.previousElementSibling, 'composer-bar');
+    const bar = composer.previousElementSibling;
+    mark(bar, 'composer-bar');
+    // Replying: in the bar, a block holds the title's row (an h3, "Replying
+    // to <name>") and the quoted message after it. Marked so that a theme
+    // needn't find the block with "div:has(> div > h3) …": a :has() left of
+    // a combinator made WebKit restyle the whole chat whenever Messenger
+    // added messages (Zalo's chats took ~80 ms longer to open).
+    const title = bar?.querySelector('h3')?.parentElement;
+    if (title && title !== bar && title.parentElement !== bar) {
+      mark(title.parentElement, 'reply-text');
+      mark(title, 'reply-title');
+      mark(title.nextElementSibling, 'reply-quote');
+    }
     const field = [...composer.children].find((child) => child.querySelector('[role="textbox"]'));
     const buttons = [...composer.querySelectorAll('[role="button"]')];
     const pathOf = (button) => button.querySelector('svg path')?.getAttribute('d') ?? '';
@@ -66,6 +80,8 @@
     'send',
     'more-actions',
   ]);
+  // The marks it gives in the bar above the box.
+  const REPLY_MARKS = new Set(['reply-text', 'reply-title', 'reply-quote']);
   const EDIT_MARKS = new Set(['edit-composer', 'edit-bar', 'edit-cancel', 'edit-box', 'edit-field', 'edit-emoji', 'edit-done']);
   // The lowest box around el, inside the chat, with a button that isn't in el.
   const aroundWithButton = (el, log) => {
@@ -105,6 +121,7 @@
       if (EDIT_MARKS.has(name)) kept = Boolean(edit?.contains(el));
       else if (name === 'composer') kept = el === composer;
       else if (name === 'composer-bar') kept = el === composer?.previousElementSibling;
+      else if (REPLY_MARKS.has(name)) kept = Boolean(composer?.previousElementSibling?.contains(el));
       else if (COMPOSER_MARKS.has(name)) kept = Boolean(composer?.contains(el));
       if (!kept) el.removeAttribute(UI);
     }

@@ -54,6 +54,11 @@ class El {
     const siblings = this.parentElement?.children ?? [];
     return siblings[siblings.indexOf(this) - 1] ?? null;
   }
+  get nextElementSibling() {
+    const siblings = this.parentElement?.children ?? [];
+    const at = siblings.indexOf(this);
+    return at < 0 ? null : (siblings[at + 1] ?? null);
+  }
   get isConnected() {
     return true;
   }
@@ -179,6 +184,40 @@ markUi(c.main, null, c.log, null);
 check('after editing: the message box is the composer again', ui(again.region) === 'composer' && marked(c.main, 'composer').length === 1);
 check('after editing: no edit marks are left', [...c.main.descendants()].every((el) => !String(ui(el)).startsWith('edit-')));
 check('after editing: the edit box left in the chat loses its marks', ui(edit.panel) === null && ui(edit.done) === null);
+
+// Replying: a bar above the box, its block holding the title's row (an h3,
+// "Replying to <name>") and the quoted message, then a close button.
+{
+  const r = chat();
+  const box = composer();
+  const title = div({}, new El('h3', {}, [new El('span')]));
+  const quote = div({}, new El('span', {}, [div({})]));
+  const text = div({}, title, quote);
+  const bar = div({}, text, button('M9'));
+  const holder = div({}, bar, box.region);
+  r.bottom.append(holder);
+  markUi(r.main, null, r.log, null);
+  check('replying: the bar is the composer bar', ui(bar) === 'composer-bar' && ui(box.region) === 'composer');
+  check('replying: its block, title and quote are marked', ui(text) === 'reply-text' && ui(title) === 'reply-title' && ui(quote) === 'reply-quote', [
+    ui(text),
+    ui(title),
+    ui(quote),
+  ]);
+  // Sent: Facebook takes the bar away, and the marks go with it even if it
+  // keeps the elements for later.
+  bar.remove();
+  r.main.append(div({}, bar));
+  markUi(r.main, null, r.log, null);
+  check('after replying: the old bar loses its marks', [bar, text, title, quote].every((el) => ui(el) === null), [ui(bar), ui(text), ui(title), ui(quote)]);
+  check('after replying: the message box is still the composer', ui(box.region) === 'composer');
+  // A link's preview in the bar has no h3: no reply marks.
+  const preview = div({}, div({}, div({}, new El('span'))));
+  box.region.remove();
+  holder.append(preview);
+  holder.append(box.region);
+  markUi(r.main, null, r.log, null);
+  check('a link preview is the composer bar, with no reply marks', ui(preview) === 'composer-bar' && [...preview.descendants()].every((el) => ui(el) === null));
+}
 
 // Marks left by fMess 0.1.34, which marked the whole chat while editing.
 {
