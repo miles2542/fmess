@@ -36,6 +36,8 @@ pub struct Settings {
     pub block_typing: bool,
     /// Show initials in place of people's pictures.
     pub hide_avatars: bool,
+    /// Blur message text, contact names, and media for screenshots or support.
+    pub redact_mode: bool,
     /// Fields check spelling. It knows only the system's languages: on a
     /// Windows set up in English nearly every Vietnamese word is underlined.
     pub spell_check: bool,
@@ -81,6 +83,7 @@ impl Default for Settings {
             mac_calls: true,
             block_typing: false,
             hide_avatars: false,
+            redact_mode: false,
             spell_check: true,
             messenger_dark_mode: None,
             theme: None,
@@ -208,6 +211,7 @@ pub fn update_settings<R: Runtime>(
         }
         if settings.block_typing != previous.block_typing
             || settings.hide_avatars != previous.hide_avatars
+            || settings.redact_mode != previous.redact_mode
             || settings.spell_check != previous.spell_check
             || settings.theme != previous.theme
             || settings.font() != previous.font()
@@ -326,6 +330,7 @@ pub fn page_settings<R: Runtime>(app: &AppHandle<R>, settings: &Settings) -> Str
         "macCalls": settings.mac_calls,
         "blockTyping": settings.block_typing,
         "hideAvatars": settings.hide_avatars,
+        "redactMode": settings.redact_mode,
         "spellCheck": settings.spell_check,
         "theme": themes::for_page(app, settings.theme.as_deref()),
         "font": settings.font(),
