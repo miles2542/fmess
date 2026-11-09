@@ -61,6 +61,9 @@ pub fn create_main_window<R: Runtime>(app: &AppHandle<R>, settings: &Settings) -
                 // The settings may have changed since the window opened.
                 let settings = settings::current(window.app_handle());
                 let _ = window.eval(settings::page_settings_script(window.app_handle(), &settings));
+                if window.is_fullscreen().unwrap_or(false) {
+                    let _ = window.eval("document.documentElement.toggleAttribute('data-fmess-fullscreen', true);");
+                }
             }
         });
     // Messenger's colours from the first frame, before the page paints.

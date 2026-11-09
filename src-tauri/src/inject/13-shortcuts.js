@@ -60,6 +60,12 @@
   window.addEventListener(
     'keydown',
     (event) => {
+      if (!isMac && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && event.code === 'F11') {
+        event.preventDefault();
+        event.stopPropagation();
+        invoke('menu_shortcut', { id: 'toggle-fullscreen' }).catch(() => {});
+        return;
+      }
       const primary = isMac ? event.metaKey : event.ctrlKey;
       let action = null;
       if (primary && !event.shiftKey && !event.altKey && event.code === 'KeyK') action = ['search'];

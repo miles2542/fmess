@@ -19,10 +19,14 @@ mod webview;
 #[cfg(windows)]
 mod webview2;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use tauri::{AppHandle, Manager, Runtime, WindowEvent};
 use tauri_plugin_window_state::StateFlags;
 
 pub const MAIN_WINDOW: &str = "main";
+
+static IS_FULLSCREEN: AtomicBool = AtomicBool::new(false);
 
 /// Passed by the login item, so fMess can start hidden when the user asked.
 pub const AUTOSTART_ARG: &str = "--autostart";
@@ -102,6 +106,18 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label() == MAIN_WINDOW {
+                if let WindowEvent::Resized(_) = event {
+                    let is_fs = window.is_fullscreen().unwrap_or(false);
+                    if IS_FULLSCREEN.swap(is_fs, Ordering::Relaxed) != is_fs {
+                        if let Some(webview) = window.app_handle().get_webview_window(MAIN_WINDOW) {
+                            let _ = webview.eval(format!(
+                                "document.documentElement.toggleAttribute('data-fmess-fullscreen', {is_fs});"
+                            ));
+                        }
+                    }
+                }
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() != MAIN_WINDOW {
                     return;
