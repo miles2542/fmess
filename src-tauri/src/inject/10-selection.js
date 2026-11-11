@@ -95,4 +95,116 @@
     dragStrip.style.cssText = `position: fixed; inset: 0 0 auto 0; height: ${inset}; z-index: 2147483647;`;
     withRoot((root) => root.append(dragStrip));
   }
+  // Double-clicking empty space in a message row initiates a reply to that
+  // message, as in Zalo PC. Double-clicking text selects words as usual.
+  const isReplyButton = (button) => {
+    if (!(button instanceof Element) || button.getAttribute('role') !== 'button') return false;
+    const d = button.querySelector('svg path')?.getAttribute('d') ?? '';
+    return /^m101 936\.5c/i.test(d) || /reply|trả lời/i.test(button.getAttribute('aria-label') ?? '');
+  };
+  const findReplyButton = (row) => {
+    const buttons = [...row.querySelectorAll('[role="toolbar"] [role="button"]:not(.fmess-quick-reaction)')];
+    return buttons.find(isReplyButton) ?? (buttons.length === 3 ? buttons[1] : null);
+  };
+  const waitReplyButton = (row, ms = 400) =>
+    new Promise((resolve) => {
+      const immediate = findReplyButton(row);
+      if (immediate) return resolve(immediate);
+      let timer = null;
+      let observer = null;
+      if (typeof MutationObserver !== 'undefined') {
+        observer = new MutationObserver(() => {
+          const found = findReplyButton(row);
+          if (found) {
+            clearTimeout(timer);
+            observer.disconnect();
+            resolve(found);
+          }
+        });
+        observer.observe(row, { childList: true, subtree: true });
+      }
+      timer = setTimeout(() => {
+        if (observer) observer.disconnect();
+        resolve(findReplyButton(row));
+      }, ms);
+    });
+  const findMessageRow = (target) => {
+    if (!(target instanceof Element) || !target.closest('[role="main"]')) return null;
+    if (target.closest('[data-fmess-ui="composer"], [data-fmess-ui="composer-bar"], [data-fmess-ui="details"], [data-fmess-ui="chat-header"], [role="navigation"]')) return null;
+    const row = target.closest('[data-scope="messages_table"], [role="log"] [role="article"], [role="row"]');
+    if (!row || row.matches('[data-scope="date_break"]') || row.querySelector('[data-scope="date_break"]')) return null;
+    if (!row.matches('[data-message-id]') && !row.querySelector('[data-message-id]')) return null;
+    return row;
+  };
+  const isContentTarget = (target) =>
+    target instanceof Element &&
+    Boolean(
+      target.closest(
+        'a[href], button, [role="button"], img, video, audio, blockquote, [role="toolbar"], [dir="auto"], [data-scope="date_break"], input, textarea, [contenteditable="true"]',
+      ),
+    );
+  const isEmptySpaceClick = (row, x, y) => {
+    const rowRect = row.getBoundingClientRect();
+    if (y < rowRect.top || y > rowRect.bottom || x < rowRect.left || x > rowRect.right) return false;
+    const interactive = row.querySelectorAll('[role="button"], [role="toolbar"]');
+    for (const el of interactive) {
+      const rect = el.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return false;
+    }
+    const messageTargets = (row.matches('[data-message-id]') ? [row] : []).concat([
+      ...row.querySelectorAll('[data-message-id], [dir="auto"], blockquote, img, video, audio'),
+    ]);
+    const contentRects = [];
+    for (const el of messageTargets) {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0 && rect.width < rowRect.width * 0.95) {
+        contentRects.push(rect);
+      }
+    }
+    if (!contentRects.length) return false;
+    for (const rect of contentRects) {
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return false;
+    }
+    let contentLeft = Infinity;
+    let contentRight = -Infinity;
+    for (const rect of contentRects) {
+      if (rect.left < contentLeft) contentLeft = rect.left;
+      if (rect.right > contentRight) contentRight = rect.right;
+    }
+    const rowMid = (rowRect.left + rowRect.right) / 2;
+    const contentMid = (contentLeft + contentRight) / 2;
+    return contentMid > rowMid ? x < contentLeft : x > contentRight;
+  };
+  const triggerReply = async (row) => {
+    let button = findReplyButton(row);
+    if (!button) {
+      const target = row.querySelector('[data-message-id]') ?? row;
+      const mouseEvent =
+        typeof MouseEvent !== 'undefined'
+          ? new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window })
+          : { type: 'mouseover' };
+      target.dispatchEvent(mouseEvent);
+      button = await waitReplyButton(row, 400);
+    }
+    if (button) {
+      button.click();
+      row.closest('[role="main"]')?.querySelector('[role="textbox"][contenteditable="true"]')?.focus();
+      return true;
+    }
+    return false;
+  };
+  document.addEventListener(
+    'dblclick',
+    (event) => {
+      if (!document.documentElement.hasAttribute(CHATS)) return;
+      if (isContentTarget(event.target)) return;
+      const row = findMessageRow(event.target);
+      if (!row || !isEmptySpaceClick(row, event.clientX, event.clientY)) return;
+      event.preventDefault();
+      window.getSelection?.()?.removeAllRanges?.();
+      triggerReply(row).catch(() => {});
+    },
+    true,
+  );
+
 
