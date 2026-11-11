@@ -5,6 +5,17 @@
   if (window.top !== window || window.__fmessInstalled) return;
   window.__fmessInstalled = true;
 
+  // SharedWorker breaks in WebView2 across page reloads (Edge issue #4852),
+  // leaving chats on an infinite spinner. Suppressing it forces Messenger's
+  // worker (MAWSetupWorker) into its dedicated Worker fallback.
+  try {
+    Object.defineProperty(window, 'SharedWorker', {
+      value: undefined,
+      configurable: false,
+      writable: false,
+    });
+  } catch {}
+
   // Debug builds (window.__fmessDebug, see webview.rs): note who adds wheel,
   // touch and scroll listeners and whether they can cancel scrolling, for
   // probes (window.__fmessListenerLog). A wheel listener that isn't passive
