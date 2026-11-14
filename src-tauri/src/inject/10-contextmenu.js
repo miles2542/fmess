@@ -1,6 +1,18 @@
   // Context menus for threads and messages: right-clicking opens the 3-dot action menu; a second click keeps the webview menu.
   let activeContextTarget = null;
   let isInvoking = false;
+  // Text selected before the right-click keeps the webview's menu (Copy). Not
+  // what the click itself selected: WebKit selects the word under a
+  // right-click before the menu is asked for, which on macOS kept every
+  // message's menu from opening.
+  let selectedBeforeRightClick = false;
+  document.addEventListener(
+    'mousedown',
+    (event) => {
+      if (event.button === 2 || (event.button === 0 && event.ctrlKey)) selectedBeforeRightClick = Boolean(window.getSelection()?.toString()?.trim());
+    },
+    { capture: true, passive: true },
+  );
 
   const isContextMenuOpen = () =>
     [...document.querySelectorAll('[role="menu"]:not([data-fmess-ui="reactions"])')].some(
@@ -56,7 +68,7 @@
       if (!onChatsPage() || document.documentElement.hasAttribute('data-fmess-resizing')) return;
       if (!(event.target instanceof Element)) return;
       if (event.target.closest('input, textarea, [contenteditable="true"]')) return;
-      if (window.getSelection()?.toString()?.trim()?.length > 0) return;
+      if (selectedBeforeRightClick) return;
 
       // 1. Sidebar conversation thread row (#56)
       const threadRow = event.target.closest(`[${LIST_PANE}] [role="row"], [role="navigation"] [role="grid"] [role="row"]`);
@@ -86,6 +98,8 @@
           return;
         }
         event.preventDefault();
+        // The word the right-click selected (above).
+        window.getSelection()?.removeAllRanges();
         activeContextTarget = messageRow;
         waitForMessageMoreButton(messageRow).then((btn) => {
           if (btn) invokeMenuButton(btn);
