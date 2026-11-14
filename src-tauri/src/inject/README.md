@@ -17,6 +17,7 @@ earlier part declares, and the numbers set that order.
 | 07-layout | Layout closer to the old desktop app; the strip under the window buttons |
 | 08-panes | Resizable chat list and details |
 | 09-marks | `data-fmess-ui` marks for themes, found without the page's language |
+| 10-contextmenu | Right-click on a chat in the list or on a message opens its menu (again: the webview's) |
 | 10-selection | What can be selected; Select All; spell check in fields (Settings); a copied image pastes as the image |
 | 11-scrollbars | Overlay scroll bars |
 | 12-viewer | The photo/video viewer: its buttons and zoom |

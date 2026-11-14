@@ -75,8 +75,9 @@
         }
       }
 
-      // 2. Chat message bubble (#57)
-      if (event.target.closest('a[href]')) return;
+      // 2. Chat message bubble (#57). Links, photos and videos keep the
+      // webview's menu (Copy Link, Copy Image; see the paste in 10-selection).
+      if (event.target.closest('a[href], img, video, svg image')) return;
       const messageRow = event.target.closest('[role="main"] [data-scope="messages_table"], [role="main"] [data-message-id]');
       if (messageRow && !event.target.closest('[data-scope="date_break"], [data-fmess-ui="composer"], [data-fmess-ui="chat-header"], [data-fmess-ui="details"]')) {
         if (activeContextTarget === messageRow && isContextMenuOpen()) {
