@@ -61,4 +61,7 @@ to try it in the debug build (a recorder probe helps, see fmess-fast-iteration
 in memory).
 
 For what happens when the computer sleeps, the network drops, the encrypted
-chats' worker dies or a notification rings, see the fmess-live-check skill.
+chats' worker dies or a notification rings, and for whether the search field
+can be typed in and text selected (focus-check.sh), see the fmess-live-check
+skill. A check that clicks or types should use real events (probe.rs,
+`window.__fmessInputRequest`), described there.

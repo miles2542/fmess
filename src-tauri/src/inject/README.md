@@ -8,12 +8,12 @@ earlier part declares, and the numbers set that order.
 
 | Part | What it does |
 |---|---|
-| 01-start | Opens the script's function; debug listener log; `withRoot` |
+| 01-start | Opens the script's function; the browser's own timers; debug listener log; `withRoot` |
 | 02-splash | fMess's loading screen in place of Facebook's |
 | 03-facebook-modules | Adjusts a few of Facebook's own modules as they load; Close in call windows; Messenger's error screens |
 | 04-privacy | Block Typing (fMess Settings) |
 | 05-messenger-prefs | Loads Facebook modules on demand; Messenger's Preferences for the Settings window |
-| 06-routes | The chats' route and its marks on `<html>`; the cursor in the message box; links |
+| 06-routes | The chats' route and its marks on `<html>`; the cursor in the message box (not over another field); links |
 | 07-layout | Layout closer to the old desktop app; the strip under the window buttons |
 | 08-panes | Resizable chat list and details |
 | 09-marks | `data-fmess-ui` marks for themes, found without the page's language |
