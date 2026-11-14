@@ -1,6 +1,6 @@
 ---
 name: fmess-live-check
-description: Check in the real fMess app what happens when the computer sleeps, the network dies or comes back, Messenger's encrypted chats' worker dies ("Couldn't load chats"), and when a notification rings. Run it before shipping any change to connections, reloading, notifications or sounds (19-recover, 14-notifications, 05-messenger-prefs, notify.rs), and when a user reports stuck "Sending", missing notifications or sounds, or a blank or error screen. Fix by simulating the case, not by releasing and waiting for reports.
+description: Check in the real fMess app what happens when the computer sleeps, the network dies or comes back, Messenger's encrypted chats' worker dies ("Couldn't load chats"), when a notification rings, and whether the keyboard and mouse still go where they're put (search field, ⌘K, selecting a message's text) after a reload or a dead network. Run it before shipping any change to connections, reloading, notifications, sounds, timers or focus (19-recover, 14-notifications, 05-messenger-prefs, 06-routes, 01-start, notify.rs), and when a user reports stuck "Sending", missing notifications or sounds, a blank or error screen, a field that can't be typed in, typing that lands in the message box, or text that can't be selected. Fix by simulating the case, not by releasing and waiting for reports.
 ---
 
 # Live check
@@ -84,6 +84,59 @@ the encrypted chats' worker keeps one to web-chat-e2ee.facebook.com.
   a silent death until it gives up on it, 44 s later; a request to a host the
   page doesn't use (m.facebook.com) goes out on a new one. 19-recover asks both.
 
+## Focus check (#51)
+
+`tests/app/focus-check.sh [fresh] [reload] [chats] [network]` (all four by
+default; macOS, debug build; `network` needs `--features test-proxy`). About 8
+minutes. With a chat open, real clicks and keys (see below) check that:
+
+- a click into the chat list's search field, then typing, types there
+- ⌘K from the message box, then typing, types in the search field
+- dragging across a message's text selects it
+
+| Case | State |
+|---|---|
+| fresh | a chat just opened |
+| reload | the page reloaded at that chat (fMess's own reload, Ctrl+R) |
+| chats | after opening four chats in a row |
+| network | a minute of dead network, then back (fMess reloads by itself) |
+
+It prints `PASS`/`FAIL` per case and, for a failure, every move of the
+keyboard: each `focus()` call with where it came from (`user-script` is
+fMess's own) and each change of address. The window stays behind what you work
+in. It types "zq" and deletes it again; nothing is sent.
+
+What it found: Facebook swaps `window.setInterval`/`clearInterval` for its
+scheduler's once its scripts load, and that `clearInterval` can't stop a
+timer started before. After a reload at a chat, 06-routes' "cursor in the
+message box" timer ran for ever (every 50 ms), so no field could be typed in and
+no text selected until fMess was quit. fMess's script now keeps the browser's
+own timers (01-start). A timer started as the page loads is the case to test.
+
+## Real clicks and keys in a probe
+
+Synthetic events (`dispatchEvent`, `el.focus()`) passed where people failed:
+#51 never showed with them. A probe asks the app for real ones (probe.rs,
+macOS): set `window.__fmessInputRequest` to steps in CSS pixels, then wait for
+`window.__fmessInputDone` to count up.
+
+```js
+const input = async (steps) => {
+  const done = window.__fmessInputDone || 0;
+  window.__fmessInputRequest = steps;
+  while ((window.__fmessInputDone || 0) === done) await new Promise((r) => setTimeout(r, 100));
+};
+await input([{ click: [x, y] }, { type: 'zq' }, { key: 'Escape' }]); // also Enter, Tab, Backspace
+await input([{ drag: [x1, y1, x2, y2] }]);                       // selects text
+await input([{ click: [x, y], count: 2 }]);                      // double click
+```
+
+They go through the window when it is the key one, otherwise straight to the
+web view (macOS won't let fMess come in front of the app you're in), so no
+Accessibility permission and the pointer doesn't move. A probe that returns
+`"again"` runs again `FMESS_PROBE_DELAY` seconds later, after a reload too:
+keep where it is in `sessionStorage` (focus-check.js does).
+
 ## Still by hand
 
 - Windows: the real toast sound (a `test build` labelled PR; install it in the
@@ -101,4 +154,6 @@ the encrypted chats' worker keeps one to web-chat-e2ee.facebook.com.
 Make it up at the proxy or with Messenger's own calls, never with a real chat
 someone else sees. A probe that gets the page reloaded loses its result: log
 from the page with `window.__fmessErrors?.push('<what>: … @' + Date.now())` and
-judge in `live-check.sh` with `judge`/`at`/`reloads`/`back`.
+judge in `live-check.sh` with `judge`/`at`/`reloads`/`back`, or return
+`"again"` and pick up after the reload (see focus-check.js). Click and type
+with real events, not the page's own (above).

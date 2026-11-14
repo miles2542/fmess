@@ -4,7 +4,9 @@
 // returns. The file is a function body: it may `await` and must `return`.
 // FMESS_PROBE_WAIT=<seconds> waits that long for it (60 by default), for a
 // probe that waits for something only a person does, like someone typing.
-// FMESS_PROBE_NO_FOCUS=1 runs it without bringing the window forward.
+// FMESS_PROBE_NO_FOCUS=1 runs it without bringing the window forward. A
+// probe that returns "again" (and reloads the page) runs again after the
+// reload, FMESS_PROBE_DELAY seconds later.
 // FMESS_PROXY=<http://host:port> (webview.rs; on macOS a build with the
 // test-proxy feature) sends the page's traffic through a proxy, for
 // tests/app/live-check.sh, which cuts the network there.
@@ -114,20 +116,32 @@ pub fn run<R: Runtime>(app: AppHandle<R>) {
             let _ = window.set_focus();
             thread::sleep(Duration::from_millis(500));
         }
-        let _ = window.eval(format!(
+        let start = format!(
             "window.__fmessProbe = undefined; (async () => {{ {script}\n}})().then(\
              (result) => {{ window.__fmessProbe = JSON.stringify(result ?? null); }},\
              (error) => {{ window.__fmessProbe = JSON.stringify('error: ' + error); }});"
-        ));
+        );
+        let _ = window.eval(&start);
         for _ in 0..wait * 2 {
             thread::sleep(Duration::from_millis(500));
             #[cfg(target_os = "macos")]
             serve_snapshot_request(&window);
+            #[cfg(target_os = "macos")]
+            serve_input_request(&window);
             let (tx, rx) = std::sync::mpsc::channel();
             let _ = window.eval_with_callback("window.__fmessProbe ?? null", move |result| {
                 let _ = tx.send(result);
             });
             match rx.recv_timeout(Duration::from_secs(5)) {
+                // A probe that reloads the page returns "again" first: it
+                // runs again once the page has loaded (sessionStorage tells
+                // it where it was), to check what a reload leaves.
+                Ok(result) if result == r#""\"again\"""# => {
+                    eprintln!("[probe] again after a reload");
+                    let _ = window.eval("window.__fmessProbe = undefined;");
+                    thread::sleep(Duration::from_secs(delay));
+                    let _ = window.eval(&start);
+                }
                 Ok(result) if result != "null" => {
                     eprintln!("[probe] {result}");
                     #[cfg(target_os = "macos")]
@@ -141,6 +155,173 @@ pub fn run<R: Runtime>(app: AppHandle<R>) {
         }
         eprintln!("[probe] no result after {wait} s");
     });
+}
+
+/// A probe can click, drag and type as a person does (macOS): real mouse and
+/// key events, sent to the window, go through WebKit like the hand's, which
+/// a dispatchEvent() or focus() in the page doesn't (the search box that lost
+/// its focus to the message box, #51, kept it under a scripted click). It
+/// sets window.__fmessInputRequest to a list of steps, in the page's CSS
+/// pixels; once they are sent, window.__fmessInputDone counts up by one:
+///   {"click": [x, y]}, {"click": [x, y], "count": 2}  (a double click)
+///   {"drag": [x1, y1, x2, y2]}                         (selects text)
+///   {"type": "text"}, {"key": "Escape"} (also Enter, Tab, Backspace)
+/// Posted in the window, not the system, so it needs no Accessibility
+/// permission and doesn't move the pointer. The window is made the key
+/// window first, as a click would (so it comes in front of what you work in).
+#[cfg(target_os = "macos")]
+fn serve_input_request<R: Runtime>(window: &tauri::WebviewWindow<R>) {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let _ = window.eval_with_callback("JSON.stringify(window.__fmessInputRequest ?? null)", move |result| {
+        let _ = tx.send(result);
+    });
+    let Ok(result) = rx.recv_timeout(Duration::from_secs(5)) else {
+        return;
+    };
+    let Some(steps) = serde_json::from_str::<String>(&result)
+        .ok()
+        .and_then(|json| serde_json::from_str::<Option<Vec<serde_json::Value>>>(&json).ok())
+        .flatten()
+    else {
+        return;
+    };
+    let _ = window.eval("window.__fmessInputRequest = null;");
+    let page = window.clone();
+    let _ = window.with_webview(move |webview| {
+        // SAFETY: Tauri gives the live WKWebView and NSWindow, on the main thread.
+        unsafe { send_input(webview.inner().cast(), webview.ns_window().cast(), &steps) };
+        let _ = page.eval("window.__fmessInputDone = (window.__fmessInputDone || 0) + 1;");
+    });
+}
+
+#[cfg(target_os = "macos")]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+#[cfg(target_os = "macos")]
+// SAFETY: laid out as CGPoint (NSPoint), two doubles.
+unsafe impl objc2::Encode for Point {
+    const ENCODING: objc2::Encoding = objc2::Encoding::Struct("CGPoint", &[f64::ENCODING, f64::ENCODING]);
+}
+
+/// # Safety
+/// `view` is a live WKWebView and `ns_window` its NSWindow; on the main thread.
+#[cfg(target_os = "macos")]
+unsafe fn send_input(view: *mut objc2::runtime::AnyObject, ns_window: *mut objc2::runtime::AnyObject, steps: &[serde_json::Value]) {
+    use objc2::{class, msg_send, runtime::AnyObject};
+    use objc2_foundation::NSString;
+
+    // NSEventType
+    const MOUSE_DOWN: usize = 1;
+    const MOUSE_UP: usize = 2;
+    const MOUSE_DRAGGED: usize = 6;
+    const KEY_DOWN: usize = 10;
+    const KEY_UP: usize = 11;
+
+    let zoom: f64 = msg_send![view, pageZoom];
+    let flipped: bool = msg_send![view, isFlipped];
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct Rect {
+        origin: Point,
+        size: Point,
+    }
+    // SAFETY: laid out as CGRect.
+    unsafe impl objc2::Encode for Rect {
+        const ENCODING: objc2::Encoding = objc2::Encoding::Struct("CGRect", &[Point::ENCODING, Point::ENCODING]);
+    }
+    let bounds: Rect = msg_send![view, bounds];
+    // WebKit takes a click in a window that isn't the key one as the click
+    // that brings it forward, and not as one on the page.
+    let is_key: bool = msg_send![ns_window, isKeyWindow];
+    if !is_key {
+        let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+        let _: () = msg_send![app, activateIgnoringOtherApps: true];
+        let nil: *mut AnyObject = std::ptr::null_mut();
+        let _: () = msg_send![ns_window, makeKeyAndOrderFront: nil];
+    }
+    let number: isize = msg_send![ns_window, windowNumber];
+    // CSS pixels in the page to the window's coordinates.
+    let at = |x: f64, y: f64| -> Point {
+        let (x, y) = (x * zoom, y * zoom);
+        let in_view = Point { x, y: if flipped { y } else { bounds.size.y - y } };
+        let nil: *mut AnyObject = std::ptr::null_mut();
+        msg_send![view, convertPoint: in_view, toView: nil]
+    };
+    // Through the window when it is the key one, as the hand's; otherwise
+    // (another app in front, which macOS doesn't let fMess take the place
+    // of) straight to the web view, which then handles them all the same.
+    let key_window: bool = msg_send![ns_window, isKeyWindow];
+    let deliver = |kind: usize, event: *mut AnyObject| unsafe {
+        if key_window {
+            let _: () = msg_send![ns_window, sendEvent: event];
+            return;
+        }
+        match kind {
+            MOUSE_DOWN => msg_send![view, mouseDown: event],
+            MOUSE_UP => msg_send![view, mouseUp: event],
+            MOUSE_DRAGGED => msg_send![view, mouseDragged: event],
+            KEY_DOWN => msg_send![view, keyDown: event],
+            _ => msg_send![view, keyUp: event],
+        }
+    };
+    let now = || -> f64 {
+        let info: *mut AnyObject = msg_send![class!(NSProcessInfo), processInfo];
+        msg_send![info, systemUptime]
+    };
+    let mouse = |kind: usize, point: Point, count: isize| {
+        let nil: *mut AnyObject = std::ptr::null_mut();
+        let event: *mut AnyObject = msg_send![class!(NSEvent),
+            mouseEventWithType: kind, location: point, modifierFlags: 0usize, timestamp: now(),
+            windowNumber: number, context: nil, eventNumber: 0isize, clickCount: count, pressure: 1.0f32];
+        deliver(kind, event);
+    };
+    let key = |characters: &str, code: u16| {
+        let nil: *mut AnyObject = std::ptr::null_mut();
+        let text = NSString::from_str(characters);
+        for kind in [KEY_DOWN, KEY_UP] {
+            let event: *mut AnyObject = msg_send![class!(NSEvent),
+                keyEventWithType: kind, location: Point { x: 0.0, y: 0.0 }, modifierFlags: 0usize, timestamp: now(),
+                windowNumber: number, context: nil, characters: &*text, charactersIgnoringModifiers: &*text,
+                isARepeat: false, keyCode: code];
+            deliver(kind, event);
+        }
+    };
+    let numbers = |value: &serde_json::Value| -> Vec<f64> {
+        value.as_array().map(|list| list.iter().filter_map(|n| n.as_f64()).collect()).unwrap_or_default()
+    };
+    for step in steps {
+        if let [x, y] = numbers(&step["click"])[..] {
+            let count = step["count"].as_i64().unwrap_or(1) as isize;
+            for n in 1..=count {
+                mouse(MOUSE_DOWN, at(x, y), n);
+                mouse(MOUSE_UP, at(x, y), n);
+            }
+        } else if let [x1, y1, x2, y2] = numbers(&step["drag"])[..] {
+            mouse(MOUSE_DOWN, at(x1, y1), 1);
+            for i in 1..=10 {
+                let f = f64::from(i) / 10.0;
+                mouse(MOUSE_DRAGGED, at(x1 + (x2 - x1) * f, y1 + (y2 - y1) * f), 1);
+            }
+            mouse(MOUSE_UP, at(x2, y2), 1);
+        } else if let Some(text) = step["type"].as_str() {
+            for c in text.chars() {
+                key(&c.to_string(), 0);
+            }
+        } else if let Some(name) = step["key"].as_str() {
+            let (characters, code) = match name {
+                "Enter" => ("\r", 36),
+                "Tab" => ("\t", 48),
+                "Backspace" => ("\u{7f}", 51),
+                _ => ("\u{1b}", 53),
+            };
+            key(characters, code);
+        }
+    }
 }
 
 /// A probe can take pictures while it runs (tests/app/chat-check.js does,
