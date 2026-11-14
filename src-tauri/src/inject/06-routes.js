@@ -52,20 +52,25 @@
   // Opening a chat puts the cursor in its message box, as the desktop app
   // did, instead of needing another click. The old chat's box is still on
   // screen for a moment, so wait for a different one (or give up waiting).
+  // A field clicked meanwhile (the search, say) keeps the cursor.
   const composer = () => document.querySelector('[role="main"] [contenteditable="true"][role="textbox"]');
+  const fieldWithCursor = () => document.activeElement?.closest?.('input, textarea, [contenteditable="true"]') ?? null;
   let focusTimer;
   function focusComposer() {
     clearInterval(focusTimer);
     const previous = composer();
+    const startedIn = fieldWithCursor();
     let tries = 0;
-    focusTimer = setInterval(() => {
+    const timer = (focusTimer = setInterval(() => {
       tries += 1;
       const box = composer();
+      const field = fieldWithCursor();
+      if (field && field !== box && field !== previous && field !== startedIn) return clearInterval(timer);
       if ((box && (box !== previous || tries > 10)) || tries > 60) {
-        clearInterval(focusTimer);
+        clearInterval(timer);
         if (box && document.activeElement !== box) box.focus();
       }
-    }, 50);
+    }, 50));
   }
   for (const method of ['pushState', 'replaceState']) {
     const original = history[method];
