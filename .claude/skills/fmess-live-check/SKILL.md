@@ -129,6 +129,7 @@ const input = async (steps) => {
 await input([{ click: [x, y] }, { type: 'zq' }, { key: 'Escape' }]); // also Enter, Tab, Backspace
 await input([{ drag: [x1, y1, x2, y2] }]);                       // selects text
 await input([{ click: [x, y], count: 2 }]);                      // double click
+await input([{ rightClick: [x, y] }]);                           // contextmenu
 ```
 
 They go through the window when it is the key one, otherwise straight to the

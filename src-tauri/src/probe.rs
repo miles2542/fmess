@@ -164,6 +164,7 @@ pub fn run<R: Runtime>(app: AppHandle<R>) {
 /// sets window.__fmessInputRequest to a list of steps, in the page's CSS
 /// pixels; once they are sent, window.__fmessInputDone counts up by one:
 ///   {"click": [x, y]}, {"click": [x, y], "count": 2}  (a double click)
+///   {"rightClick": [x, y]}                             (the context menu)
 ///   {"drag": [x1, y1, x2, y2]}                         (selects text)
 ///   {"type": "text"}, {"key": "Escape"} (also Enter, Tab, Backspace)
 /// Posted in the window, not the system, so it needs no Accessibility
@@ -218,6 +219,8 @@ unsafe fn send_input(view: *mut objc2::runtime::AnyObject, ns_window: *mut objc2
     // NSEventType
     const MOUSE_DOWN: usize = 1;
     const MOUSE_UP: usize = 2;
+    const RIGHT_MOUSE_DOWN: usize = 3;
+    const RIGHT_MOUSE_UP: usize = 4;
     const MOUSE_DRAGGED: usize = 6;
     const KEY_DOWN: usize = 10;
     const KEY_UP: usize = 11;
@@ -265,6 +268,8 @@ unsafe fn send_input(view: *mut objc2::runtime::AnyObject, ns_window: *mut objc2
             MOUSE_DOWN => msg_send![view, mouseDown: event],
             MOUSE_UP => msg_send![view, mouseUp: event],
             MOUSE_DRAGGED => msg_send![view, mouseDragged: event],
+            RIGHT_MOUSE_DOWN => msg_send![view, rightMouseDown: event],
+            RIGHT_MOUSE_UP => msg_send![view, rightMouseUp: event],
             KEY_DOWN => msg_send![view, keyDown: event],
             _ => msg_send![view, keyUp: event],
         }
@@ -301,6 +306,9 @@ unsafe fn send_input(view: *mut objc2::runtime::AnyObject, ns_window: *mut objc2
                 mouse(MOUSE_DOWN, at(x, y), n);
                 mouse(MOUSE_UP, at(x, y), n);
             }
+        } else if let [x, y] = numbers(&step["rightClick"])[..] {
+            mouse(RIGHT_MOUSE_DOWN, at(x, y), 1);
+            mouse(RIGHT_MOUSE_UP, at(x, y), 1);
         } else if let [x1, y1, x2, y2] = numbers(&step["drag"])[..] {
             mouse(MOUSE_DOWN, at(x1, y1), 1);
             for i in 1..=10 {
