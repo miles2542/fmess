@@ -100,6 +100,13 @@
        aspect-ratio flex box (photos in shared-post previews), which froze
        whole chats. Auto height looks the same there and takes milliseconds. */
     html[${CHATS}] img[height="100%"][width="100%"] { height: auto !important; }
+    /* Pressing Escape in an empty composer focuses a row in Messenger's
+       grid, drawing a full-width browser focus ring across the chat pane. */
+    html[${CHATS}] [role="main"] :is([data-scope="messages_table"], [role="row"], [role="gridcell"]):focus,
+    html[${CHATS}] [role="main"] :is([data-scope="messages_table"], [role="row"], [role="gridcell"]):focus-visible {
+      outline: none !important;
+      box-shadow: none !important;
+    }
   `;
   withRoot((root) => root.append(layoutStyle));
 
