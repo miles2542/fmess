@@ -48,7 +48,7 @@
     'keydown',
     (event) => {
       if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented) return;
-      if (document.querySelector('[role="dialog"], [role="menu"]')) return;
+      if (isViewerOpen() || document.querySelector('[role="dialog"], [role="menu"]')) return;
       const cancel = [...document.querySelectorAll('[data-fmess-ui="record-cancel"]')].find(isVisible);
       if (!cancel) return;
       event.preventDefault();

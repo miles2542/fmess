@@ -207,15 +207,35 @@
     }
     event.stopPropagation();
   }
-  // Escape zooms back out first. Unzoomed, it is Facebook's: it closes the
-  // viewer, or the menu or dialog open over it.
+  const viewerCloseButton = () =>
+    viewerCloseBox()?.querySelector('[role="button"]') ??
+    [...(viewerBar()?.querySelectorAll('[role="button"]') ?? [])].pop() ??
+    null;
+
+  // Escape zooms back out first. Unzoomed, it closes the viewer, or the menu or
+  // dialog open over it.
   document.addEventListener(
     'keydown',
     (event) => {
-      if (!viewerOpen || !zoom || event.key !== 'Escape' || event.isComposing) return;
+      if (event.key !== 'Escape' || event.isComposing || !isViewerOpen() || document.fullscreenElement) return;
+      if (zoom) {
+        event.preventDefault();
+        event.stopPropagation();
+        resetZoom(true);
+        return;
+      }
+      const subdialog = viewerBar()
+        ? Boolean(document.querySelector('[role="dialog"]'))
+        : document.querySelectorAll('[role="dialog"]').length > 1;
+      if (subdialog || document.querySelector('[role="menu"]')) return;
+      const close = viewerCloseButton();
+      if (!close) return;
       event.preventDefault();
       event.stopPropagation();
-      resetZoom(true);
+      if (document.activeElement?.closest?.('[contenteditable="true"]')) {
+        document.activeElement.blur();
+      }
+      close.click();
     },
     true,
   );
